@@ -1,0 +1,724 @@
+# ===== Code Cell 1 =====
+import os
+import requests
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from datetime import date
+from itertools import product
+from typing import Callable, Dict, Optional
+from util.data_client.fmp import getFMPData
+from util.data_client.dataPullHelpers import normalize_df_for_parquet
+
+
+pd.set_option('display.max_columns', None)
+pd.set_option('display.max_rows', 200)
+
+os.environ["FMP_API_KEY"] = "0xhC0ZX4ADicg0mWV9fujrNsomufQPaL"
+
+
+# ===== Code Cell 3 =====
+tickers = ['SPY', 'QQQ', 'IWM', 'RSP']
+price_endpoint = "historical-price-eod/dividend-adjusted"
+price_data = {}
+
+for tk in tickers:
+    price_data[tk] = getFMPData(
+        endpoint=price_endpoint,
+        symbol=tk.upper(),
+        from_="2024-01-01",
+        to=date.today().strftime("%Y-%m-%d"),
+    )
+
+price_data.keys()
+
+
+# ===== Code Cell 4 =====
+dfs = []
+for tk, _data in price_data.items():
+    _df = pd.DataFrame(_data)
+    _df = normalize_df_for_parquet(
+        _df,
+        datetime_success_ratio=0.9,
+        numeric_success_ratio=0.9,
+        treat_huge_int_as_string=False
+    )
+    dfs.append(_df)
+
+df = pd.concat(dfs, ignore_index=True)
+df = df.sort_values(['symbol', 'date'], ignore_index=True)
+df.shape
+
+
+# ===== Code Cell 5 =====
+df
+
+
+# ===== Code Cell 6 =====
+df.dtypes
+
+
+# ===== Code Cell 9 =====
+import importlib
+import util.features.core as f_core
+import util.features.families.returns as f_return
+import util.features.families.price as f_price
+import util.features.families.trend as f_trend
+import util.features.families.drawdown as f_dd
+import util.features.transforms as trsfm
+
+importlib.reload(f_core)
+importlib.reload(f_return)
+importlib.reload(f_price)
+importlib.reload(f_trend)
+importlib.reload(f_dd)
+importlib.reload(trsfm)
+
+FeatureBuilder = f_core.FeatureBuilder
+RETURN_FAMILY = f_return.RETURN_FAMILY
+RAWPRICE_FAMILY = f_price.RAWPRICE_FAMILY
+TREND_FAMILY = f_trend.TREND_FAMILY
+MDD_FAMILY = f_dd.MDD_FAMILY
+
+
+# ===== Code Cell 10 =====
+df = df.sort_values(["symbol", "date"]).reset_index(drop=True)
+
+builder = FeatureBuilder(
+    df,
+    date_col="date",
+    sym_col="symbol",
+)
+
+
+# ===== Code Cell 11 =====
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mtick
+import seaborn as sns
+
+
+def get_features(
+    builder: FeatureBuilder,
+    family: dict,
+    template: str,
+    params_lst: list[dict] = [],
+    transform_fn: Optional[Callable] = None,
+    transform_params: Optional[dict] = None,
+) -> dict:
+
+    specs = []
+
+    for params in params_lst:
+        base = family[template](**params)
+        if transform_fn is None:
+            specs += base
+        else:
+            if transform_params is None:
+                transform_params = {}
+            specs += transform_fn(base, **transform_params)
+
+    features = builder.build_published(specs)
+    return features
+
+
+def get_feature_df(
+    source_df: pd.DataFrame,
+    feature_dict: dict,
+    symbol_col: str = "symbol",
+    date_col: str = "date",
+) -> pd.DataFrame:
+
+    feature_df = pd.DataFrame(feature_dict, index=source_df.index)
+    feature_df = pd.concat(
+        [source_df[[symbol_col, date_col]], feature_df],
+        axis=1,
+    )
+    return feature_df
+
+
+def get_wide_view(
+    feature_df: pd.DataFrame,
+    feature_col: str,
+    symbol_col: str = "symbol",
+    date_col: str = "date",
+    window: Optional[int] = None,
+) -> pd.DataFrame:
+
+    if window is None:
+        window = min(252, feature_df.shape[0])
+
+    df = feature_df.groupby(symbol_col).tail(window)
+    df = df[[symbol_col, date_col, feature_col]]
+    v = pd.pivot(
+        df,
+        columns=symbol_col,
+        index=date_col,
+        values=feature_col
+    )
+    v = v.sort_index()
+    return v
+
+
+def get_asset_panel(
+    feature_df: pd.DataFrame,
+    symbol_col: str = "symbol",
+    column_names: Optional[list[str]] = None,
+) -> pd.DataFrame:
+
+    v = feature_df.groupby(symbol_col).tail(1).set_index(symbol_col)
+    v = v.iloc[:, 1:]
+    if column_names is not None:
+        v.columns = column_names
+    return v
+
+
+def trend_plot(
+    wide_df: pd.DataFrame,
+    title: str,
+    ylabel: str,
+    figsize: tuple[float] = (12.0, 5.5),
+    symbols: Optional[list[str]] = None,
+    is_percentage: bool = True,
+) -> None:
+
+    if symbols is not None:
+        df = wide_df[symbols].copy()
+    else:
+        df = wide_df.copy()
+
+    fig, ax = plt.subplots(figsize=figsize, dpi=130)
+
+    for col in df.columns:
+        ax.plot(df.index, df[col], label=col, linewidth=2)
+
+    ax.axhline(0, linewidth=1, alpha=0.7)
+
+    ax.set_title(title, fontsize=16, weight="bold", pad=14)
+    ax.set_ylabel(ylabel)
+    if is_percentage:
+        ax.yaxis.set_major_formatter(mtick.PercentFormatter(1.0))
+
+    ax.grid(axis="y", alpha=0.25)
+    ax.legend(frameon=False, ncol=len(df.columns), loc="upper left")
+
+    ax.spines[["top", "right"]].set_visible(False)
+
+    plt.tight_layout()
+    plt.show()
+
+
+def panel_plot(
+    panel_df: pd.DataFrame,
+    title: str,
+    figsize: tuple[float] = (7, 3.5),
+    features: Optional[list[str]] = None,
+    is_percentage: bool = True,
+    cmap: str = "RdYlGn",
+) -> None:
+
+    if features is not None:
+        df = panel_df[features].copy()
+    else:
+        df = panel_df.copy()
+
+    if is_percentage:
+        fmt = ".1%"
+        cbar_kws = {"format": mtick.PercentFormatter(1.0)}
+    else:
+        fmt = ".2f"
+        cbar_kws = None
+
+    fig, ax = plt.subplots(figsize=figsize, dpi=130)
+
+    sns.heatmap(
+        df,
+        annot=True,
+        fmt=fmt,
+        cmap=cmap,
+        center=0,
+        linewidths=0.5,
+        cbar_kws=cbar_kws,
+        ax=ax
+    )
+
+    ax.set_title(title, fontsize=14, weight="bold", pad=12)
+    ax.set_xlabel("")
+    ax.set_ylabel("")
+
+    plt.tight_layout()
+    plt.show()
+
+
+# ===== Code Cell 12 =====
+list(RETURN_FAMILY.keys())
+
+
+# ===== Code Cell 13 =====
+return_features = {}
+
+price_cols = ["adjClose"]
+lookbacks = [5, 10, 20, 60, 126]
+windows = [60]
+
+params_list_1 = [
+    {"price_col": p, "lookback": lb}
+    for p in price_cols for lb in lookbacks
+]
+
+params_list_2 = [
+    {"price_col": p, "lookback": lb, "window": w}
+    for p in price_cols for lb in lookbacks for w in windows
+]
+
+return_features["raw"] = get_features(
+    builder=builder,
+    family=RETURN_FAMILY,
+    template="RETURN",
+    params_lst=params_list_1
+)
+
+# return_features["zscore"] = get_features(
+#     builder=builder,
+#     family=RETURN_FAMILY,
+#     template="RETURN_ZSCORE",
+#     params_lst=params_list_2
+# )
+
+return_features["zscore"] = get_features(
+    builder=builder,
+    family=RETURN_FAMILY,
+    template="RETURN",
+    params_lst=params_list_1,
+    transform_fn=trsfm.add_ts_zscore,
+    transform_params={"z_window": 60, "include_base": False}
+)
+
+
+# ===== Code Cell 14 =====
+raw_return_df = get_feature_df(df, return_features["raw"])
+raw_return_wide = get_wide_view(raw_return_df, "px__ret__logret__lb10__raw")
+raw_return_wide
+
+
+# ===== Code Cell 15 =====
+trend_plot(
+    raw_return_wide.tail(126),
+    title="Rolling 10-Day Return",
+    ylabel="Return",
+    symbols=['SPY', 'RSP']
+)
+
+
+# ===== Code Cell 16 =====
+trend_plot(
+    raw_return_wide.tail(126),
+    title="Rolling 10-Day Return",
+    ylabel="Return",
+    symbols=['QQQ', 'IWM']
+)
+
+
+# ===== Code Cell 17 =====
+panel_view = get_asset_panel(
+    raw_return_df,
+    column_names=['5-Day', '10-Day', '20-Day', '60-Day', '126-Day']
+)
+panel_view.loc['BRS'] = 0.5 * (panel_view.loc['RSP'] - panel_view.loc['SPY']) + 0.5 * (panel_view.loc['IWM'] - panel_view.loc['SPY'])
+panel_view
+
+
+# ===== Code Cell 18 =====
+panel_plot(panel_view, title="Return (Raw) Panel")
+
+
+# ===== Code Cell 19 =====
+z_return_df = get_feature_df(df, return_features["zscore"])
+panel_view = get_asset_panel(
+    z_return_df,
+    column_names=['5-Day', '10-Day', '20-Day', '60-Day', '126-Day']
+)
+# panel_view.loc['BRS'] = 0.5 * (panel_view.loc['RSP'] - panel_view.loc['SPY']) + 0.5 * (panel_view.loc['IWM'] - panel_view.loc['SPY'])
+panel_plot(panel_view, title="Return (60-Day Z-Score) Panel", is_percentage=False)
+
+
+# ===== Code Cell 21 =====
+specs = []
+
+specs += RETURN_FAMILY["ANNUALIZED_SIMPLE_RETURN"](
+    price_col="adjClose",
+    lookback=5,
+)
+
+specs += RETURN_FAMILY["ANNUALIZED_SIMPLE_RETURN"](
+    price_col="adjClose",
+    lookback=20,
+)
+
+specs += RETURN_FAMILY["ANNUALIZED_SIMPLE_RETURN"](
+    price_col="adjClose",
+    lookback=60,
+)
+
+specs += RETURN_FAMILY["ANNUALIZED_SIMPLE_RETURN"](
+    price_col="adjClose",
+    lookback=120,
+)
+
+m2_features = builder.build_published(specs)
+
+
+# ===== Code Cell 22 =====
+feature_df = pd.DataFrame(m2_features, index=df.index)
+
+m2_df = pd.concat(
+    [df[["symbol", "date"]], feature_df,],
+    axis=1,
+)
+
+m2_df
+
+
+# ===== Code Cell 25 =====
+list(RAWPRICE_FAMILY.keys())
+
+
+# ===== Code Cell 26 =====
+dma_features = {}
+
+family_name = RAWPRICE_FAMILY
+template_name = "DISTANCE_FROM_MOVING_AVERAGE_PRICE"
+price_cols = ["adjClose"]
+windows = [5, 10, 20, 60, 126]
+
+params_list = [
+    {"price_col": p, "window": w}
+    for p in price_cols for w in windows
+]
+
+dma_features["raw"] = get_features(
+    builder=builder,
+    family=family_name,
+    template=template_name,
+    params_lst=params_list
+)
+
+dma_features["zscore"] = get_features(
+    builder=builder,
+    family=family_name,
+    template=template_name,
+    params_lst=params_list,
+    transform_fn=trsfm.add_ts_zscore,
+    transform_params={"z_window": 60, "include_base": False}
+)
+
+
+# ===== Code Cell 27 =====
+raw_dma_df = get_feature_df(df, dma_features["raw"])
+panel_view = get_asset_panel(
+    raw_dma_df,
+    column_names=['5-Day', '10-Day', '20-Day', '60-Day', '126-Day']
+)
+panel_view.loc['QQQ-IWM'] = panel_view.loc['QQQ'] - panel_view.loc['IWM']
+panel_plot(panel_view, title="DMA (Raw) Panel", is_percentage=True)
+
+
+# ===== Code Cell 28 =====
+raw_dma_df.tail()
+
+
+# ===== Code Cell 29 =====
+raw_dma_df = get_feature_df(df, dma_features["raw"])
+raw_dma_wide = get_wide_view(raw_dma_df, "px__prc__dma__w5__raw")
+
+trend_plot(
+    raw_dma_wide.tail(60),
+    title="Rolling 5-Day DMA",
+    ylabel="DMA",
+    symbols=['QQQ', 'IWM']
+)
+
+
+# ===== Code Cell 30 =====
+z_dma_df = get_feature_df(df, dma_features["zscore"])
+panel_view = get_asset_panel(
+    z_dma_df,
+    column_names=['5-Day', '10-Day', '20-Day', '60-Day', '126-Day']
+)
+# panel_view.loc['QQQ-IWM'] = panel_view.loc['QQQ'] - panel_view.loc['IWM']
+panel_plot(panel_view, title="DMA (60-Day Z-Score) Panel", is_percentage=False)
+
+
+# ===== Code Cell 32 =====
+list(RAWPRICE_FAMILY.keys())
+
+
+# ===== Code Cell 33 =====
+vdma_features = {}
+
+family_name = RAWPRICE_FAMILY
+template_name = "DISTANCE_FROM_MOVING_AVERAGE_PRICE_VOLATILITY_NORMALIZED"
+price_cols = ["adjClose"]
+windows = [5, 10, 20, 60, 126]
+
+params_list = [
+    {"price_col": p, "window": w}
+    for p in price_cols for w in windows
+]
+
+vdma_features["raw"] = get_features(
+    builder=builder,
+    family=family_name,
+    template=template_name,
+    params_lst=params_list
+)
+
+vdma_features["zscore"] = get_features(
+    builder=builder,
+    family=family_name,
+    template=template_name,
+    params_lst=params_list,
+    transform_fn=trsfm.add_ts_zscore,
+    transform_params={"z_window": 60, "include_base": False}
+)
+
+
+# ===== Code Cell 34 =====
+raw = get_feature_df(df, vdma_features["raw"])
+panel_view = get_asset_panel(
+    raw,
+    column_names=['5-Day', '10-Day', '20-Day', '60-Day', '126-Day']
+)
+# panel_view.loc['QQQ-IWM'] = panel_view.loc['QQQ'] - panel_view.loc['IWM']
+panel_plot(panel_view, title="VDMA (Raw) Panel", is_percentage=False)
+
+
+# ===== Code Cell 35 =====
+zscore = get_feature_df(df, vdma_features["zscore"])
+panel_view = get_asset_panel(
+    zscore,
+    column_names=['5-Day', '10-Day', '20-Day', '60-Day', '126-Day']
+)
+# panel_view.loc['QQQ-IWM'] = panel_view.loc['QQQ'] - panel_view.loc['IWM']
+panel_plot(panel_view, title="VDMA (60-Day Z-Score) Panel", is_percentage=False)
+
+
+# ===== Code Cell 38 =====
+list(TREND_FAMILY.keys())
+
+
+# ===== Code Cell 39 =====
+mas_features = {}
+
+family_name = TREND_FAMILY
+template_name = "MOVING_AVERAGE_LOG_SLOPE_NORMALIZED_BY_RV"
+price_cols = ["adjClose"]
+ma_windows = [5, 10, 20, 60, 126]
+windows = [10]
+
+params_list = [
+    {"price_col": p, "window": w, "ma_window": mw}
+    for p in price_cols for mw in ma_windows for w in windows
+]
+
+mas_features["raw"] = get_features(
+    builder=builder,
+    family=family_name,
+    template=template_name,
+    params_lst=params_list
+)
+
+mas_features["zscore"] = get_features(
+    builder=builder,
+    family=family_name,
+    template=template_name,
+    params_lst=params_list,
+    transform_fn=trsfm.add_ts_zscore,
+    transform_params={"z_window": 60, "include_base": False}
+)
+
+
+# ===== Code Cell 40 =====
+raw = get_feature_df(df, mas_features["raw"])
+panel_view = get_asset_panel(
+    raw,
+    column_names=['5-Day', '10-Day', '20-Day', '60-Day', '126-Day']
+)
+# panel_view.loc['QQQ-IWM'] = panel_view.loc['QQQ'] - panel_view.loc['IWM']
+panel_plot(panel_view, title="MA 10-Day Slope (Raw) Panel", is_percentage=False)
+
+
+# ===== Code Cell 41 =====
+zscore = get_feature_df(df, mas_features["zscore"])
+panel_view = get_asset_panel(
+    zscore,
+    column_names=['5-Day', '10-Day', '20-Day', '60-Day', '126-Day']
+)
+# panel_view.loc['QQQ-IWM'] = panel_view.loc['QQQ'] - panel_view.loc['IWM']
+panel_plot(panel_view, title="MA 10-Day Slope (60-Day Z-Score) Panel", is_percentage=False)
+
+
+# ===== Code Cell 43 =====
+list(TREND_FAMILY.keys())
+
+
+# ===== Code Cell 44 =====
+regtrd_features = {}
+
+family_name = TREND_FAMILY
+template_name = "REGRESSION_TREND_LOG_MA"
+price_cols = ["adjClose"]
+ma_windows = [5, 10, 20, 60, 126]
+windows = [10]
+
+params_list = [
+    {"price_col": p, "window": w, "ma_window": mw}
+    for p in price_cols for mw in ma_windows for w in windows
+]
+
+regtrd_features["raw"] = get_features(
+    builder=builder,
+    family=family_name,
+    template=template_name,
+    params_lst=params_list
+)
+
+regtrd_features["zscore"] = get_features(
+    builder=builder,
+    family=family_name,
+    template=template_name,
+    params_lst=params_list,
+    transform_fn=trsfm.add_ts_zscore,
+    transform_params={"z_window": 60, "include_base": False, "target":{"signal": "regbeta-rv"}}
+)
+
+
+# ===== Code Cell 45 =====
+raw = get_feature_df(df, regtrd_features["raw"])
+panel_view = get_asset_panel(
+    raw[['symbol', 'date'] + [x for x in raw.columns if 'regbeta-rv' in x]],
+    column_names=['5-Day', '10-Day', '20-Day', '60-Day', '126-Day']
+)
+# panel_view.loc['QQQ-IWM'] = panel_view.loc['QQQ'] - panel_view.loc['IWM']
+panel_plot(panel_view, title="Reg 10-Day Slope (Raw) Panel", is_percentage=False)
+
+
+# ===== Code Cell 46 =====
+zscore = get_feature_df(df, regtrd_features["zscore"])
+panel_view = get_asset_panel(
+    zscore,
+    column_names=['5-Day', '10-Day', '20-Day', '60-Day', '126-Day']
+)
+# panel_view.loc['QQQ-IWM'] = panel_view.loc['QQQ'] - panel_view.loc['IWM']
+panel_plot(panel_view, title="Reg 10-Day Slope (60-Day Z-Score) Panel", is_percentage=False)
+
+
+# ===== Code Cell 49 =====
+list(RETURN_FAMILY.keys())
+
+
+# ===== Code Cell 50 =====
+rv_features = {}
+
+family_name = RETURN_FAMILY
+template_name = "REALIZED_VOLATILITY"
+price_cols = ["adjClose"]
+windows = [5, 10, 20, 60, 126]
+
+params_list = [
+    {"price_col": p, "window": w}
+    for p in price_cols for w in windows
+]
+
+rv_features["raw"] = get_features(
+    builder=builder,
+    family=family_name,
+    template=template_name,
+    params_lst=params_list
+)
+
+rv_features["zscore"] = get_features(
+    builder=builder,
+    family=family_name,
+    template=template_name,
+    params_lst=params_list,
+    transform_fn=trsfm.add_ts_zscore,
+    transform_params={"z_window": 60, "include_base": False}
+)
+
+
+# ===== Code Cell 51 =====
+raw = get_feature_df(df, rv_features["raw"])
+panel_view = get_asset_panel(
+    raw,
+    column_names=['5-Day', '10-Day', '20-Day', '60-Day', '126-Day']
+)
+# panel_view.loc['QQQ-IWM'] = panel_view.loc['QQQ'] - panel_view.loc['IWM']
+panel_plot(panel_view, title="RV (Raw) Panel", is_percentage=True)
+
+
+# ===== Code Cell 52 =====
+zscore = get_feature_df(df, rv_features["zscore"])
+panel_view = get_asset_panel(
+    zscore,
+    column_names=['5-Day', '10-Day', '20-Day', '60-Day', '126-Day']
+)
+# panel_view.loc['QQQ-IWM'] = panel_view.loc['QQQ'] - panel_view.loc['IWM']
+panel_plot(panel_view, title="RV (60-Day Z-Score) Panel", is_percentage=False)
+
+
+# ===== Code Cell 55 =====
+list(MDD_FAMILY.keys())
+
+
+# ===== Code Cell 56 =====
+mdd_features = {}
+
+family_name = MDD_FAMILY
+template_name = "MDD"
+price_cols = ["adjClose"]
+windows = [20, 60, 126, 252]
+
+params_list = [
+    {"price_col": p, "window": w,}
+    for p in price_cols for w in windows
+]
+
+mdd_features["raw"] = get_features(
+    builder=builder,
+    family=family_name,
+    template=template_name,
+    params_lst=params_list
+)
+
+mdd_features["zscore"] = get_features(
+    builder=builder,
+    family=family_name,
+    template=template_name,
+    params_lst=params_list,
+    transform_fn=trsfm.add_ts_zscore,
+    transform_params={"z_window": 60, "include_base": False}
+)
+
+
+# ===== Code Cell 57 =====
+raw = get_feature_df(df, mdd_features["raw"])
+panel_view = get_asset_panel(
+    raw,
+    column_names=['20-Day', '60-Day', '126-Day', '252-Day']
+)
+# panel_view.loc['QQQ-IWM'] = panel_view.loc['QQQ'] - panel_view.loc['IWM']
+panel_plot(panel_view, title="MDD (Raw) Panel", is_percentage=True, cmap="viridis")
+
+
+# ===== Code Cell 58 =====
+zscore = get_feature_df(df, mdd_features["zscore"])
+panel_view = get_asset_panel(
+    zscore,
+    column_names=['20-Day', '60-Day', '126-Day', '252-Day']
+)
+# panel_view.loc['QQQ-IWM'] = panel_view.loc['QQQ'] - panel_view.loc['IWM']
+panel_plot(panel_view, title="MDD (60-Day Z-Score) Panel", is_percentage=False, cmap="viridis")
+
+
+# ===== Code Cell 59 =====
+
