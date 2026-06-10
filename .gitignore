@@ -2,6 +2,9 @@
 .env
 check_env.py
 
+# Documentation / communication docs (not for repo)
+documentation/
+
 # Large / generated data
 GetFMPData/raw_data/
 reports/

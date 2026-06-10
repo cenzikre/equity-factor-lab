@@ -176,6 +176,61 @@ async def fetch_fmp_for_tickers(
         return results
 
 
+async def fetch_fmp_all_pages(
+    endpoint: str,
+    *,
+    params: Optional[Dict[str, Any]] = None,
+    client: Optional[FMPClient] = None,
+    page_param: str = "page",
+    start_page: int = 0,
+    limit: int = 10000,
+    limit_param: str = "limit",
+    max_pages: int = 1000,
+    verbose: bool = False,
+) -> List[Any]:
+    """
+    Collect all records from a paginated FMP list endpoint.
+
+    Fetches pages sequentially (each page depends on the previous not being
+    empty), using the client's rate limiter and retry logic on every request.
+    Stops when a page returns an empty response or max_pages is reached.
+
+    Args:
+        endpoint:    FMP endpoint, e.g. "delisted-companies"
+        params:      Extra query params (besides page/limit/apikey)
+        client:      FMPClient instance; created from env if omitted
+        page_param:  Query param name for page number (default "page")
+        start_page:  First page index (default 0)
+        limit:       Records per page
+        limit_param: Query param name for page size (default "limit")
+        max_pages:   Safety cap on total pages (default 1000)
+        verbose:     Print per-page progress when True
+
+    Returns:
+        Flat list of all records across all pages.
+    """
+    if client is None:
+        client = FMPClient()
+    if params is None:
+        params = {}
+
+    all_records: List[Any] = []
+
+    async with aiohttp.ClientSession(timeout=client.timeout) as session:
+        for page in range(start_page, start_page + max_pages):
+            page_params = {**params, page_param: page, limit_param: limit}
+            result = await client.fetch(session, endpoint, page_params)
+
+            if not result:
+                break
+
+            all_records.extend(result)
+            if verbose:
+                print(f"  [{endpoint}] page {page}: +{len(result):,} records (total {len(all_records):,})")
+
+    return all_records
+
+
 # -----------------------
 # Example usage
 # -----------------------
