@@ -27,6 +27,12 @@ pip install \
     python-dotenv \
     numpy \
     pandas \
-    pyarrow
+    pyarrow \
+    matplotlib \
+    pytest \
+    ipykernel
+
+echo "Registering Jupyter kernel..."
+python -m ipykernel install --user --name "${ENV_NAME}" --display-name "Python (${ENV_NAME})"
 
 echo "Environment '${ENV_NAME}' is ready."

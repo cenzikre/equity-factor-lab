@@ -4,16 +4,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Environment Setup
 
+All code runs in the `fmp_data` conda env (`~/.conda/envs/fmp_data`, Python 3.10). The base `/opt/conda` python lacks the async/pull dependencies — don't use it for pulls or tests.
+
 ```bash
-# Create and configure the conda environment (Python 3.10)
+# Create and configure the conda environment (one-time; also registers the
+# "Python (fmp_data)" Jupyter kernel)
 bash setup_fmp_env.sh
 
 # Activate the environment in subsequent sessions
-source activate_fmp_env.sh   # activates 'fmp_async' env
+source activate_fmp_env.sh   # activates 'fmp_data' env
 # or: conda activate fmp_data
+# or call the interpreter directly: ~/.conda/envs/fmp_data/bin/python
 ```
 
-Required packages: `aiohttp`, `aiolimiter`, `tenacity`, `tqdm`, `python-dotenv`, `numpy`, `pandas`, `pyarrow`, `matplotlib`
+Required packages: `aiohttp`, `aiolimiter`, `tenacity`, `tqdm`, `python-dotenv`, `numpy`, `pandas`, `pyarrow`, `matplotlib`, `pytest` (dev), `ipykernel` (notebooks)
 
 Set the FMP API key before running any data pull code:
 ```bash
