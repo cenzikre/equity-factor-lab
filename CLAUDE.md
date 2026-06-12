@@ -34,9 +34,8 @@ This is a quantitative trading research codebase running on AWS SageMaker. Work 
 - `FMPDataClient.py` — async batch client (`FMPClient` + `fetch_fmp_for_tickers`). Handles rate limiting (token-bucket, ~12 req/s), concurrency (semaphore, 25 in-flight), exponential-backoff retries via `tenacity`. Use this for bulk pulls across many tickers.
 - `fmp.py` — sync single-request helpers (`getFMPData`, `getFMPData_withkey`) and an `lru_cache`-backed baseline price fetcher. Use for ad-hoc/notebook queries.
 - `dataPullHelpers.py` — `normalize_df_for_parquet()`: dtype normalization for mixed-schema API responses before writing parquet. Handles numeric/datetime inference, huge-int-as-string edge cases.
-- `FMPDataPull.py` — script that pulls bulk fundamental data (balance sheet, cash flow, key metrics, enterprise values) for the full stock universe to parquet.
 
-**`util/data_pull/`** — bulk pull orchestration (supersedes `FMPDataPull.py`):
+**`util/data_pull/`** — bulk pull orchestration (supersedes the legacy `FMPDataPull.py`, removed 2026-06):
 - `components.py` — data component registry (7 FMP datatypes), date-window chunking for daily prices (pd1, pd2, ...), range-sized quarterly limits.
 - `pull.py` — `run_pull()`: universe → batched fetch → normalization → dated S3 snapshot `raw/<label>/` with `data_{component}_tk0_pd{P}.parquet`, `data_tickerprofile.parquet`, `error_log.json`, `pull_manifest.json`. Injectable `fetch_fn` for testing.
 
@@ -51,7 +50,7 @@ python GetFMPData/construct_full_data.py --raw-date <L> --label <L>
 
 Tests: `python -m pytest tests/` (no network; fake fetch + local filesystem).
 
-**`GetFMPData/`** — entry-point scripts above, plus older/standalone versions of the data clients (pre-`util/` refactor). The canonical implementations are in `util/data_client/`.
+**`GetFMPData/`** — entry-point scripts above, plus the universe CSVs and legacy notebooks. The canonical data-client implementations are in `util/data_client/`.
 
 **`MarketInternalMonitor/universe/`** — CSV stock universe files used as the ticker list for bulk pulls.
 
@@ -140,7 +139,7 @@ The panel DataFrame passed to `FeatureBuilder` must have:
 - `MarketInternalMonitor/SP500Monitor.ipynb` — S&P 500 market internals monitoring
 - `MarketInternalMonitor/QuantFeatures.ipynb` — feature engineering exploration
 - `MarketInternalMonitor/multiStockDayModelDatePrepare.ipynb` — multi-stock dataset preparation
-- `GetFMPData/ConstructFullData.ipynb` — full data construction pipeline
+- `GetFMPData/ConstructFullData.ipynb` — deprecated full data construction pipeline (superseded by `construct_full_data.py`; kept for reference)
 - `GetFMPData/DataEval.ipynb` — data evaluation / QA notebook
 - `BuildQuantFeatures/BuidlFeatures.ipynb` — feature build pipeline
 
