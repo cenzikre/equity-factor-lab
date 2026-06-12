@@ -32,7 +32,22 @@ This is a quantitative trading research codebase running on AWS SageMaker. Work 
 - `dataPullHelpers.py` — `normalize_df_for_parquet()`: dtype normalization for mixed-schema API responses before writing parquet. Handles numeric/datetime inference, huge-int-as-string edge cases.
 - `FMPDataPull.py` — script that pulls bulk fundamental data (balance sheet, cash flow, key metrics, enterprise values) for the full stock universe to parquet.
 
-**`GetFMPData/`** — older/standalone versions of the data clients (pre-`util/` refactor). The canonical implementations are in `util/data_client/`.
+**`util/data_pull/`** — bulk pull orchestration (supersedes `FMPDataPull.py`):
+- `components.py` — data component registry (7 FMP datatypes), date-window chunking for daily prices (pd1, pd2, ...), range-sized quarterly limits.
+- `pull.py` — `run_pull()`: universe → batched fetch → normalization → dated S3 snapshot `raw/<label>/` with `data_{component}_tk0_pd{P}.parquet`, `data_tickerprofile.parquet`, `error_log.json`, `pull_manifest.json`. Injectable `fetch_fn` for testing.
+
+**`util/dataset_builder/`** — panel dataset construction (supersedes `ConstructFullData.ipynb`): column specs / merge specs, S3 parquet I/O with symbol predicate pushdown + `StreamingParquetWriter`, point-in-time merge core (as-of `filingDate`, per-symbol liquidity rollings, validation stats), markdown build report renderer.
+
+**Pipeline** (full regeneration; instance RAM is ~15GB so construction streams in ticker batches):
+```bash
+python GetFMPData/build_stock_universe.py                          # optional; pull builds fresh by default
+python GetFMPData/fmp_data_pull.py --start 2006-01-01 --label <L>  # long pull (or --start ~2y ago, weekly)
+python GetFMPData/construct_full_data.py --raw-date <L> --label <L>
+```
+
+Tests: `python -m pytest tests/` (no network; fake fetch + local filesystem).
+
+**`GetFMPData/`** — entry-point scripts above, plus older/standalone versions of the data clients (pre-`util/` refactor). The canonical implementations are in `util/data_client/`.
 
 **`MarketInternalMonitor/universe/`** — CSV stock universe files used as the ticker list for bulk pulls.
 
