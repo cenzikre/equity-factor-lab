@@ -43,7 +43,8 @@ This is a quantitative trading research codebase running on AWS SageMaker. Work 
 
 **Pipeline** (full regeneration; instance RAM is ~15GB so construction streams in ticker batches):
 ```bash
-python GetFMPData/build_stock_universe.py                          # optional; pull builds fresh by default
+python GetFMPData/build_stock_universe.py                          # optional; pull reuses the universe CSV if its
+                                                                   # sidecar age <= 60d (--universe-max-age-days), else rebuilds
 python GetFMPData/fmp_data_pull.py --start 2006-01-01 --label <L>  # long pull (or --start ~2y ago, weekly)
 python GetFMPData/construct_full_data.py --raw-date <L> --label <L>
 ```

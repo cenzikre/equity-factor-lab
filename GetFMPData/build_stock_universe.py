@@ -24,8 +24,10 @@ Environment:
 
 import argparse
 import asyncio
+import json
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 
@@ -68,6 +70,41 @@ OUTPUT_COLS = [
 ]
 
 DEFAULT_OUT = Path(__file__).parent / "universe" / "info-stock-universe-usTrading-delistedIncl.csv"
+
+
+# ---------------------------------------------------------------------------
+# Build-timestamp sidecar (file mtime is unreliable — git checkout resets it)
+# ---------------------------------------------------------------------------
+
+def _meta_path(csv_path: Path) -> Path:
+    return Path(csv_path).with_suffix(".meta.json")
+
+
+def write_universe_meta(csv_path: Path, n_rows: int) -> None:
+    """Record the build timestamp next to the universe CSV."""
+    meta = {
+        "built_at_utc": datetime.now(timezone.utc).isoformat(),
+        "rows": n_rows,
+        "generator": "build_stock_universe",
+    }
+    _meta_path(csv_path).write_text(json.dumps(meta, indent=2) + "\n")
+
+
+def universe_age_days(csv_path: Path = DEFAULT_OUT) -> Optional[float]:
+    """Age of the universe CSV in days, from its sidecar build timestamp.
+
+    Returns None when the CSV or sidecar is missing/unreadable — callers
+    should treat unknown age as stale.
+    """
+    csv_path = Path(csv_path)
+    if not csv_path.exists():
+        return None
+    try:
+        meta = json.loads(_meta_path(csv_path).read_text())
+        built_at = datetime.fromisoformat(meta["built_at_utc"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    return (datetime.now(timezone.utc) - built_at).total_seconds() / 86400.0
 
 
 # ---------------------------------------------------------------------------
@@ -306,6 +343,7 @@ def build_stock_universe(
     result = _apply_final_filters(us_df[out_cols].copy(), audit_path=audit_path)
 
     result.to_csv(out_path, index=False)
+    write_universe_meta(out_path, len(result))
     print(f"\nDone — {len(result):,} rows saved to {out_path}")
     return result
 

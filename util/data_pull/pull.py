@@ -61,18 +61,33 @@ PROFILE_DATE_COLS = ["ipoDate", "delistedDate"]
 
 
 def get_universe(universe: Union[None, str, Path, pd.DataFrame] = None,
-                 client_kwargs: Optional[Dict] = None) -> pd.DataFrame:
+                 client_kwargs: Optional[Dict] = None,
+                 max_age_days: Optional[float] = None) -> pd.DataFrame:
     """Resolve the stock universe for a pull.
 
     - DataFrame: used as-is
     - str/Path: read as the universe CSV written by build_stock_universe
-    - None: build a fresh universe directly from FMP (network)
+    - None: reuse the default universe CSV when its recorded build age
+      (sidecar .meta.json) is within max_age_days, otherwise build a fresh
+      universe directly from FMP (network). max_age_days None/0 always
+      rebuilds; unknown age (missing sidecar) counts as stale.
     """
     if isinstance(universe, pd.DataFrame):
         return universe
     if universe is not None:
         return pd.read_csv(universe)
-    from GetFMPData.build_stock_universe import build_stock_universe
+    from GetFMPData.build_stock_universe import (
+        DEFAULT_OUT, build_stock_universe, universe_age_days)
+    if max_age_days:
+        age = universe_age_days(DEFAULT_OUT)
+        if age is not None and age <= max_age_days:
+            print(f"reusing universe {DEFAULT_OUT.name} "
+                  f"(built {age:.1f} days ago, max age {max_age_days:g})",
+                  flush=True)
+            return pd.read_csv(DEFAULT_OUT)
+        print(f"universe is stale or age unknown "
+              f"(age {'unknown' if age is None else f'{age:.1f}d'}, "
+              f"max age {max_age_days:g}) — rebuilding", flush=True)
     return build_stock_universe(client_kwargs=client_kwargs or DEFAULT_CLIENT_KWARGS)
 
 
@@ -134,6 +149,7 @@ def run_pull(*,
              ticker_batch_size: int = 500,
              chunk_years: int = 10,
              max_symbols: Optional[int] = None,
+             universe_max_age_days: Optional[float] = 60,
              fetch_fn: Optional[Callable] = None,
              verbose: bool = True) -> Dict:
     """Run a full data pull and write a dated snapshot.
@@ -149,7 +165,8 @@ def run_pull(*,
     base_path = base_path or raw_snapshot_path(label)
     fs.create_dir(base_path, recursive=True)
 
-    universe_df = get_universe(universe, client_kwargs)
+    universe_df = get_universe(universe, client_kwargs,
+                               max_age_days=universe_max_age_days)
     tickers = universe_df["symbol"].dropna().astype(str).unique().tolist()
     if max_symbols:
         tickers = tickers[:max_symbols]
@@ -218,6 +235,7 @@ def run_pull(*,
         ],
         "client_kwargs": client_kwargs,
         "ticker_batch_size": ticker_batch_size,
+        "universe_max_age_days": universe_max_age_days,
         "n_tickers": len(tickers),
         "n_requests": n_requests,
         "elapsed_seconds": round(time.time() - t0, 1),

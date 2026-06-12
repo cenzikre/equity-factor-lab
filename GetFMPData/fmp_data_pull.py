@@ -4,8 +4,11 @@ Generic runner for both pipeline modes (no per-task entry points yet):
   - long pull for modeling/backtesting:   --start 2006-01-01
   - short pull for monitoring/reporting:  --start <~2 years ago>   (weekly)
 
-By default the current stock universe is built fresh from FMP
-(build_stock_universe) before pulling; pass --universe-csv to reuse one.
+By default the stock universe CSV is reused when its recorded build age
+(sidecar .meta.json) is within --universe-max-age-days (60); otherwise it
+is rebuilt fresh from FMP (build_stock_universe, ~27k requests / ~37 min).
+Pass --universe-csv to use a specific file, or --universe-max-age-days 0
+to force a rebuild.
 
 Output: s3://<bucket>/<prefix>/raw/<label>/data_{component}_tk0_pd{P}.parquet
 plus data_tickerprofile.parquet, error_log.json, pull_manifest.json.
@@ -43,7 +46,11 @@ def main() -> None:
                     choices=DEFAULT_COMPONENTS, metavar="COMPONENT",
                     help=f"subset of {DEFAULT_COMPONENTS} (default all)")
     ap.add_argument("--universe-csv", default=None,
-                    help="existing universe CSV (default: build fresh from FMP)")
+                    help="existing universe CSV (default: reuse/rebuild per max age)")
+    ap.add_argument("--universe-max-age-days", type=float, default=60,
+                    help="reuse the default universe CSV if its recorded build "
+                         "age is within N days; 0 forces a rebuild "
+                         "(ignored when --universe-csv is given)")
     ap.add_argument("--label", default=date.today().strftime("%Y%m%d"),
                     help="snapshot label -> s3 .../raw/<label>/")
     ap.add_argument("--max-symbols", type=int, default=None,
@@ -70,6 +77,7 @@ def main() -> None:
         ticker_batch_size=args.ticker_batch_size,
         chunk_years=args.chunk_years,
         max_symbols=args.max_symbols,
+        universe_max_age_days=args.universe_max_age_days,
     )
 
 
