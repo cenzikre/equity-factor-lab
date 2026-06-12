@@ -17,7 +17,7 @@ source activate_fmp_env.sh   # activates 'fmp_data' env
 # or call the interpreter directly: ~/.conda/envs/fmp_data/bin/python
 ```
 
-Required packages: `aiohttp`, `aiolimiter`, `tenacity`, `tqdm`, `python-dotenv`, `numpy`, `pandas`, `pyarrow`, `matplotlib`, `pytest` (dev), `ipykernel` (notebooks)
+Required packages: `requests`, `aiohttp`, `aiolimiter`, `tenacity`, `tqdm`, `python-dotenv`, `numpy`, `pandas`, `pyarrow`, `matplotlib`, `pytest` (dev), `ipykernel` (notebooks)
 
 Set the FMP API key before running any data pull code:
 ```bash

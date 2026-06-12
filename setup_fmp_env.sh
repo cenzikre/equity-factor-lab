@@ -20,6 +20,7 @@ conda activate "${ENV_NAME}"
 echo "Installing Python packages..."
 pip install --upgrade pip
 pip install \
+    requests \
     aiohttp \
     aiolimiter \
     tenacity \

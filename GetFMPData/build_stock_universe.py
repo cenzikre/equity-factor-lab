@@ -233,14 +233,29 @@ def fetch_delisted_companies(client_kwargs: Dict[str, Any]) -> pd.DataFrame:
 # Step 5: Finalize and export
 # ---------------------------------------------------------------------------
 
-def _apply_final_filters(df: pd.DataFrame) -> pd.DataFrame:
-    before = len(df)
-    df = df[df["symbol"].notna()]
-    df = df[df.get("industry", pd.Series(dtype=str)) != "Shell Companies"]
-    dropped = before - len(df)
-    if dropped:
-        print(f"  Dropped {dropped:,} rows (null symbol or Shell Companies)")
-    return df.reset_index(drop=True)
+def _apply_final_filters(
+    df: pd.DataFrame,
+    audit_path: Optional[Path] = None,
+) -> pd.DataFrame:
+    null_mask = df["symbol"].isna()
+    if "industry" in df.columns:
+        shell_mask = ~null_mask & (df["industry"] == "Shell Companies")
+    else:
+        shell_mask = pd.Series(False, index=df.index)
+    drop_mask = null_mask | shell_mask
+    if drop_mask.any():
+        print(
+            f"  Dropped {drop_mask.sum():,} rows "
+            f"({null_mask.sum():,} null symbol, {shell_mask.sum():,} Shell Companies)"
+        )
+        if audit_path is not None:
+            audit = df[drop_mask].copy()
+            audit["dropReason"] = null_mask.map({True: "null_symbol"}).fillna("shell_company")
+            audit_path = Path(audit_path)
+            audit_path.parent.mkdir(parents=True, exist_ok=True)
+            audit.to_csv(audit_path, index=False)
+            print(f"  Dropped-row audit written to {audit_path}")
+    return df[~drop_mask].reset_index(drop=True)
 
 
 # ---------------------------------------------------------------------------
@@ -250,6 +265,7 @@ def _apply_final_filters(df: pd.DataFrame) -> pd.DataFrame:
 def build_stock_universe(
     out_path: Optional[Path] = None,
     client_kwargs: Optional[Dict[str, Any]] = None,
+    audit_path: Optional[Path] = None,
 ) -> pd.DataFrame:
     """
     Run the full pipeline and write the universe CSV.
@@ -287,7 +303,7 @@ def build_stock_universe(
 
     # --- Step 5 ---
     out_cols = [c for c in OUTPUT_COLS if c in us_df.columns]
-    result = _apply_final_filters(us_df[out_cols].copy())
+    result = _apply_final_filters(us_df[out_cols].copy(), audit_path=audit_path)
 
     result.to_csv(out_path, index=False)
     print(f"\nDone — {len(result):,} rows saved to {out_path}")
@@ -321,6 +337,12 @@ def _parse_args() -> argparse.Namespace:
         default=25,
         help="Max concurrent in-flight requests",
     )
+    parser.add_argument(
+        "--audit-csv",
+        type=Path,
+        default=None,
+        help="Optional path to write rows dropped by the final filter (with dropReason)",
+    )
     return parser.parse_args()
 
 
@@ -332,7 +354,11 @@ def main() -> None:
         concurrency=args.concurrency,
         timeout_s=30,
     )
-    build_stock_universe(out_path=args.out, client_kwargs=client_kwargs)
+    build_stock_universe(
+        out_path=args.out,
+        client_kwargs=client_kwargs,
+        audit_path=args.audit_csv,
+    )
 
 
 if __name__ == "__main__":
