@@ -49,6 +49,8 @@ python GetFMPData/fmp_data_pull.py --start 2006-01-01 --label <L>  # long pull (
 python GetFMPData/construct_full_data.py --raw-date <L> --label <L>
 ```
 
+**Breadth task** (per-task entry point): `python GetFMPData/breadth_data_pull.py` — active universe → 15-month price + enterprise-values pull (~18.5k requests) → liquidity panel via the same `merge_core` chain (`add_liquidity_flags` is the single source of the liquidity definition) → qualified symbol list in `MarketInternalMonitor/universe/breadth-qualified-<label>.csv`. `--skip-pull --overwrite` requalifies from an existing snapshot without API calls.
+
 Tests: `python -m pytest tests/` (no network; fake fetch + local filesystem).
 
 **`GetFMPData/`** — entry-point scripts above, plus the universe CSVs and legacy notebooks. The canonical data-client implementations are in `util/data_client/`.
