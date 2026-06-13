@@ -26,7 +26,7 @@ Output:
     s3://<bucket>/<prefix>/data_price-ev-liquidity_<label>.parquet    liquidity panel
     s3://<bucket>/<prefix>/raw/<label>/breadth_qualification.json     config + counts
     s3://<bucket>/<prefix>/raw/<label>/breadth_qualified_symbols.csv
-    MarketInternalMonitor/universe/breadth-qualified-<label>.csv      report ticker list
+    GetFMPData/universe/breadth-qualified-<label>.csv                 report ticker list
 
 Examples:
     python GetFMPData/breadth_data_pull.py                  # full run, ~18.5k requests
@@ -69,7 +69,7 @@ UNADJ_COLS = ["symbol", "date", "adjClose", "volume"]
 METRIC_COLS = ["adjClose", "rawClose", "price_tr20", "dollarVolume_tr20",
                "turnOver_tr20", "marketCapitalization", "numberOfShares"]
 
-DEFAULT_QUALIFIED_DIR = REPO_ROOT / "MarketInternalMonitor" / "universe"
+DEFAULT_QUALIFIED_DIR = REPO_ROOT / "GetFMPData" / "universe"
 
 
 def filter_active_universe(universe_df: pd.DataFrame) -> pd.DataFrame:
@@ -174,8 +174,8 @@ def main() -> None:
     ap.add_argument("--concurrency", type=int,
                     default=DEFAULT_CLIENT_KWARGS["concurrency"])
     ap.add_argument("--qualified-csv", default=None,
-                    help="local qualified-list path (default MarketInternal"
-                         "Monitor/universe/breadth-qualified-<label>.csv)")
+                    help="local qualified-list path (default "
+                         "GetFMPData/universe/breadth-qualified-<label>.csv)")
     ap.add_argument("--overwrite", action="store_true",
                     help="replace an existing liquidity panel on S3")
     args = ap.parse_args()

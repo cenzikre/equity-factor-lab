@@ -8,7 +8,9 @@ documentation/
 # Large / generated data
 GetFMPData/raw_data/
 reports/
-MarketInternalMonitor/universe/stockUniverseProfile.csv
+
+# Retired legacy files (reference only, not in repo)
+legacyFiles/
 
 # Jupyter
 .ipynb_checkpoints/

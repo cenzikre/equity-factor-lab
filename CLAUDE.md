@@ -49,13 +49,13 @@ python GetFMPData/fmp_data_pull.py --start 2006-01-01 --label <L>  # long pull (
 python GetFMPData/construct_full_data.py --raw-date <L> --label <L>
 ```
 
-**Breadth task** (per-task entry point): `python GetFMPData/breadth_data_pull.py` — active universe → 15-month price + enterprise-values pull (~18.5k requests) → liquidity panel via the same `merge_core` chain (`add_liquidity_flags` is the single source of the liquidity definition) → qualified symbol list in `MarketInternalMonitor/universe/breadth-qualified-<label>.csv`. `--skip-pull --overwrite` requalifies from an existing snapshot without API calls.
+**Breadth task** (per-task entry point): `python GetFMPData/breadth_data_pull.py` — active universe → 15-month price + enterprise-values pull (~18.5k requests) → liquidity panel via the same `merge_core` chain (`add_liquidity_flags` is the single source of the liquidity definition) → qualified symbol list in `GetFMPData/universe/breadth-qualified-<label>.csv`. `--skip-pull --overwrite` requalifies from an existing snapshot without API calls.
 
 Tests: `python -m pytest tests/` (no network; fake fetch + local filesystem).
 
-**`GetFMPData/`** — entry-point scripts above, plus the universe CSVs and legacy notebooks. The canonical data-client implementations are in `util/data_client/`.
+**`GetFMPData/`** — entry-point scripts above, plus the universe CSVs (`GetFMPData/universe/`: master universe + breadth-qualified lists) and legacy notebooks. The canonical data-client implementations are in `util/data_client/`.
 
-**`MarketInternalMonitor/universe/`** — CSV stock universe files used as the ticker list for bulk pulls.
+**`DevLab/`** — development workspace for exploration / experimental / in-progress notebooks. Nothing production lives here; mature code graduates to `util/` or `GetFMPData/`. (Formerly `MarketInternalMonitor`, retired 2026-06-13; its legacy notebooks, `featureStore.py`, and old universe CSVs are in the git-ignored `legacyFiles/` folder.)
 
 ### Feature Engineering
 
@@ -93,7 +93,7 @@ Tests: `python -m pytest tests/` (no network; fake fetch + local filesystem).
 
 Each family file exports a `*_FAMILY` dict of `FeatureTemplate` objects. `FeatureTemplate` wraps a `template_fn` that returns `List[FeatureSpec]` (including intermediate publish=False specs needed to compute the published output).
 
-**`MarketInternalMonitor/featureStore.py`** — older monolithic feature store; the canonical implementation is now `util/features/`.
+(The older monolithic feature store `featureStore.py` was retired to `legacyFiles/` on 2026-06-13; `util/features/` is the only implementation.)
 
 ### Dashboard / Reporting
 
@@ -139,9 +139,6 @@ The panel DataFrame passed to `FeatureBuilder` must have:
 ### Notebooks
 
 - `marketReporting.ipynb` — market reporting
-- `MarketInternalMonitor/SP500Monitor.ipynb` — S&P 500 market internals monitoring
-- `MarketInternalMonitor/QuantFeatures.ipynb` — feature engineering exploration
-- `MarketInternalMonitor/multiStockDayModelDatePrepare.ipynb` — multi-stock dataset preparation
 - `GetFMPData/ConstructFullData.ipynb` — deprecated full data construction pipeline (superseded by `construct_full_data.py`; kept for reference)
 - `GetFMPData/DataEval.ipynb` — data evaluation / QA notebook
 - `BuildQuantFeatures/BuidlFeatures.ipynb` — feature build pipeline
