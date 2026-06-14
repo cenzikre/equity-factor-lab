@@ -197,6 +197,22 @@ def normalize_inputs(inputs: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     return {k: _normalize_input_value(v) for k, v in (inputs or {}).items()}
 
 
+def _promote_name_arg(
+    name: Optional[Union[str, FeatureNameSpec]],
+    name_spec: Optional[FeatureNameSpec],
+) -> Tuple[Optional[str], Optional[FeatureNameSpec]]:
+    """Allow callers to pass a FeatureNameSpec positionally as `name`.
+
+    Families build a structured FeatureNameSpec and pass it as the name; this
+    promotes it to name_spec so the rendered string is derived from the spec
+    (the structured object stays the source of truth). An explicit name_spec
+    always wins.
+    """
+    if isinstance(name, FeatureNameSpec):
+        return None, name_spec or name
+    return name, name_spec
+
+
 def _feature_name_from_spec(name: Optional[str], name_spec: Optional[FeatureNameSpec]) -> str:
     if name_spec is not None:
         return make_feature_name(
@@ -247,7 +263,7 @@ def make_spec(
     *,
     primitive: str,
     inputs: Dict[str, Any],
-    name: Optional[str] = None,
+    name: Optional[Union[str, FeatureNameSpec]] = None,
     name_spec: Optional[FeatureNameSpec] = None,
     params: Optional[Dict[str, Any]] = None,
     post: Optional[List[PostOp]] = None,
@@ -259,7 +275,11 @@ def make_spec(
     Use ColumnRef/col(...) for source columns, FeatureRef/feat(...) for upstream
     feature dependencies, and raw literals for scalar literal values. Raw strings
     in inputs are normalized to ColumnRef for convenience.
+
+    `name` may be a plain string or a FeatureNameSpec; a FeatureNameSpec is
+    promoted to name_spec so the rendered name is derived structurally.
     """
+    name, name_spec = _promote_name_arg(name, name_spec)
     normalized_inputs = normalize_inputs(inputs)
     feature_name = _feature_name_from_spec(name=name, name_spec=name_spec)
     normalized_params = params or {}

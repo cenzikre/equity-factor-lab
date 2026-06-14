@@ -318,9 +318,17 @@ def make_summary_score(feature_groups: dict[str, pd.DataFrame]) -> pd.DataFrame:
 # Feature-name display helpers
 # -----------------------------
 def _parse_feature_name_for_display(name: str) -> dict:
-    """Best-effort parser for names like px__ret__logret__lb20_zw60__z."""
-    parts = name.split("__")
-    if len(parts) != 5:
+    """Best-effort parser for names like px__ret__logret__lb20_zw60__z.
+
+    Delegates to the single canonical parser (util.features.transforms.
+    parse_feature_name) so there is one name grammar in the codebase; falls
+    back to a signal-only dict for names that don't fit the 5-part format.
+    """
+    from util.features.transforms import parse_feature_name
+
+    try:
+        ns = parse_feature_name(name)
+    except ValueError:
         return {
             "domain": "",
             "family": "",
@@ -330,31 +338,12 @@ def _parse_feature_name_for_display(name: str) -> dict:
             "raw": name,
         }
 
-    domain, family, signal, param_str, state = parts
-    params = {}
-
-    if param_str and param_str != "none":
-        for token in param_str.split("_"):
-            if not token:
-                continue
-            key = ""
-            val = ""
-            hit_val = False
-            for ch in token:
-                if not hit_val and ch.isalpha():
-                    key += ch
-                else:
-                    hit_val = True
-                    val += ch
-            if key:
-                params[key] = val
-
     return {
-        "domain": domain,
-        "family": family,
-        "signal": signal,
-        "params": params,
-        "state": state,
+        "domain": ns.domain,
+        "family": ns.family,
+        "signal": ns.signal,
+        "params": dict(ns.params or {}),
+        "state": ns.state,
         "raw": name,
     }
 

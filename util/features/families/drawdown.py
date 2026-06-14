@@ -2,9 +2,9 @@ from __future__ import annotations
 from dataclasses import replace
 from util.features.families.truerange import template_ts_atr
 from util.features.core import (
+    FeatureNameSpec,
     FeatureSpec,
     FeatureTemplate,
-    make_feature_name,
     make_spec,
     col,
     feat,
@@ -15,14 +15,14 @@ DOMAIN = "px"
 FAMILY = "dd"
 
 
-def dd_feature_name(signal: str, *, lb=None, w=None, state="raw") -> str:
+def dd_feature_name(signal: str, *, lb=None, w=None, state="raw") -> FeatureNameSpec:
     params = {}
     if lb is not None:
         params["lb"] = lb
     if w is not None:
         params["w"] = w
 
-    return make_feature_name(
+    return FeatureNameSpec(
         domain=DOMAIN,
         family=FAMILY,
         signal=signal,
@@ -84,7 +84,7 @@ def template_ts_mddatrnorm(
     )
 
     atr_base = make_spec(
-        name=make_feature_name(
+        name=FeatureNameSpec(
             domain="px",
             family="tr",
             signal="mean",

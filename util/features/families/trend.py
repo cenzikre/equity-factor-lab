@@ -2,9 +2,9 @@ from __future__ import annotations
 # from dataclasses import replace
 from typing import Any, Dict, Literal, Optional
 from util.features.core import (
+    FeatureNameSpec,
     FeatureSpec,
     FeatureTemplate,
-    make_feature_name,
     make_spec,
     col,
     feat,
@@ -27,7 +27,7 @@ def trend_feature_name(
     ma: Optional[int] = None,
     ap: Optional[int] = None,
     state: str = "logp",
-) -> str:
+) -> FeatureNameSpec:
     """Deterministic readable name for regression-trend features.
 
     Parameters:
@@ -44,7 +44,7 @@ def trend_feature_name(
     if ap is not None:
         params["ap"] = ap
 
-    return make_feature_name(
+    return FeatureNameSpec(
         domain=DOMAIN,
         family=FAMILY,
         signal=signal,
@@ -97,7 +97,7 @@ def spec_log_price(
     publish: bool = False,
 ) -> FeatureSpec:
     return make_spec(
-        name=make_feature_name(
+        name=FeatureNameSpec(
             domain="px",
             family="prc",
             signal="log",
@@ -301,7 +301,7 @@ def template_ts_maslope(
 ) -> list[FeatureSpec]:
 
     maprc = make_spec(
-        name=make_feature_name(
+        name=FeatureNameSpec(
             domain="px",
             family="prc",
             signal="mean",
@@ -332,7 +332,7 @@ def template_ts_mapctslope(
 ) -> list[FeatureSpec]:
 
     maprc = make_spec(
-        name=make_feature_name(
+        name=FeatureNameSpec(
             domain="px",
             family="prc",
             signal="mean",
@@ -363,7 +363,7 @@ def template_ts_malogslope(
 ) -> list[FeatureSpec]:
 
     maprc = make_spec(
-        name=make_feature_name(
+        name=FeatureNameSpec(
             domain="px",
             family="prc",
             signal="mean",

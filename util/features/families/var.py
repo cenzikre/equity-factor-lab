@@ -1,9 +1,9 @@
 from __future__ import annotations
 from typing import Any, Dict, Literal
 from util.features.core import (
+    FeatureNameSpec,
     FeatureSpec,
     FeatureTemplate,
-    make_feature_name,
     make_spec,
     feat,
 )
@@ -47,13 +47,15 @@ def tailrisk_feature_name(
     w: int,
     p: float,
     state: str = "raw",
-) -> str:
+) -> FeatureNameSpec:
+    # Note: `p` here is the compact display tag (0.05 -> 5) used in the rendered
+    # name. The true percentile lives in FeatureSpec.params (q) and feature_id.
     params: Dict[str, Any] = {
         "lb": lb,
         "w": w,
         "p": _p_name_tag(p),
     }
-    return make_feature_name(
+    return FeatureNameSpec(
         domain=DOMAIN,
         family=family,
         signal=signal,

@@ -1,14 +1,13 @@
 from __future__ import annotations
 from dataclasses import replace
 from util.features.core import (
+    FeatureNameSpec,
     FeatureSpec,
     FeatureTemplate,
-    make_feature_name,
     make_spec,
     col,
     feat,
 )
-from util.features.families.returns import template_ts_mvr
 
 
 DOMAIN = "px"
@@ -24,7 +23,7 @@ def prc_feature_name(
     lw=None,
     p=None,
     state="raw",
-) -> str:
+) -> FeatureNameSpec:
     params = {}
     if lb is not None:
         params["lb"] = lb
@@ -37,7 +36,7 @@ def prc_feature_name(
     if p is not None:
         params["p"] = p
 
-    return make_feature_name(
+    return FeatureNameSpec(
         domain=DOMAIN,
         family=FAMILY,
         signal=signal,
@@ -254,7 +253,7 @@ def template_ts_mapdrtatr(
     )
 
     tr = make_spec(
-        name=make_feature_name(
+        name=FeatureNameSpec(
             domain="px",
             family="tr",
             signal="diff",
@@ -271,7 +270,7 @@ def template_ts_mapdrtatr(
     )
 
     atr = make_spec(
-        name=make_feature_name(
+        name=FeatureNameSpec(
             domain="px",
             family="tr",
             signal="mean",
@@ -328,7 +327,7 @@ def template_ts_mapdrtmvr(
     )
 
     ret = make_spec(
-        name=make_feature_name(
+        name=FeatureNameSpec(
             domain="px",
             family="ret",
             signal="logret",
@@ -342,7 +341,7 @@ def template_ts_mapdrtmvr(
     )
 
     mvr = make_spec(
-        name=make_feature_name(
+        name=FeatureNameSpec(
             domain="px",
             family="ret",
             signal="std",
@@ -407,7 +406,7 @@ def template_ts_vdma(
     dma = replace(dma_template[-1], publish=False)
 
     ret = make_spec(
-        name=make_feature_name(
+        name=FeatureNameSpec(
             domain="px",
             family="ret",
             signal="logret",
@@ -421,7 +420,7 @@ def template_ts_vdma(
     )
 
     rv = make_spec(
-        name=make_feature_name(
+        name=FeatureNameSpec(
             domain="px",
             family="ret",
             signal="std",
@@ -444,92 +443,6 @@ def template_ts_vdma(
     )
 
     return dma_template[:-1] + [dma, ret, rv, vdma]
-
-
-def template_ts_maslope(
-    price_col: str,
-    window: int,
-    period: int,
-) -> list[FeatureSpec]:
-
-    maprc = make_spec(
-        name=prc_feature_name("mean", w=window, state="raw"),
-        primitive="ts_mean",
-        inputs={"x": col(price_col)},
-        params={"window": window},
-        publish=False,
-    )
-
-    slope = make_spec(
-        name=prc_feature_name("maslope", w=window, lb=period, state="raw"),
-        primitive="ts_slope",
-        inputs={"x": feat(maprc)},
-        params={"lookback": period},
-        publish=True,
-    )
-
-    return [maprc, slope]
-
-
-def template_ts_mapctslope(
-    price_col: str,
-    window: int,
-    period: int,
-) -> list[FeatureSpec]:
-
-    maprc = make_spec(
-        name=prc_feature_name("mean", w=window, state="raw"),
-        primitive="ts_mean",
-        inputs={"x": col(price_col)},
-        params={"window": window},
-        publish=False,
-    )
-
-    slope = make_spec(
-        name=prc_feature_name("maslope", w=window, lb=period, state="pct"),
-        primitive="ts_pctslope",
-        inputs={"x": feat(maprc)},
-        params={"lookback": period},
-        publish=True,
-    )
-
-    return [maprc, slope]
-
-
-def template_ts_malogslope(
-    price_col: str,
-    window: int,
-    period: int,
-) -> list[FeatureSpec]:
-
-    maprc = make_spec(
-        name=prc_feature_name("mean", w=window, state="raw"),
-        primitive="ts_mean",
-        inputs={"x": col(price_col)},
-        params={"window": window},
-        publish=False,
-    )
-
-    slope = make_spec(
-        name=prc_feature_name("maslope", w=window, lb=period, state="log"),
-        primitive="ts_logslope",
-        inputs={"x": feat(maprc)},
-        params={"lookback": period},
-        publish=False,
-    )
-
-    rv_specs = template_ts_mvr(price_col, lookback=1, window=period)
-    rv = replace(rv_specs[-1], publish=False)
-
-    nslope = make_spec(
-        name=prc_feature_name("maslope", w=window, lb=period, state="log-rv"),
-        primitive="ratio",
-        inputs={"a": feat(slope), "b": feat(rv)},
-        params={"eps": 1e-12},
-        publish=True,
-    )
-
-    return rv_specs[:-1] + [rv, maprc, slope, nslope]
 
 
 RAWPRICE_FAMILY = {
@@ -616,32 +529,7 @@ RAWPRICE_FAMILY = {
         description="price distance between current and moving average normalized by volatility",
         tags=("price", "average", "diff", "ratio", "timeseries", "volatility"),
     ),
-    "MOVING_AVERAGE_SLOPE": FeatureTemplate(
-        name="ts_maslope",
-        domain=DOMAIN,
-        family=FAMILY,
-        signal="maslope",
-        template_fn=template_ts_maslope,
-        description="slope of moving average price over a lookback period",
-        tags=("price", "average", "slope", "trend", "timeseries"),
-        unitless=False,
-    ),
-    "MOVING_AVERAGE_PCT_SLOPE": FeatureTemplate(
-        name="ts_mapctslope",
-        domain=DOMAIN,
-        family=FAMILY,
-        signal="maslope",
-        template_fn=template_ts_mapctslope,
-        description="percent slope of moving average price over a lookback period",
-        tags=("price", "average", "slope", "trend", "timeseries"),
-    ),
-    "MOVING_AVERAGE_LOG_SLOPE_NORMALIZED_BY_RV": FeatureTemplate(
-        name="ts_malogslope",
-        domain=DOMAIN,
-        family=FAMILY,
-        signal="maslope",
-        template_fn=template_ts_malogslope,
-        description="rv normalized log slope of moving average price over a lookback period",
-        tags=("price", "average", "slope", "trend", "timeseries", "rv"),
-    ),
+    # Moving-average slope/trend features live in families/trend.py
+    # (TREND_FAMILY: MOVING_AVERAGE_SLOPE / MOVING_AVERAGE_PCT_SLOPE /
+    # MOVING_AVERAGE_LOG_SLOPE_NORMALIZED_BY_RV) -- the single source of truth.
 }

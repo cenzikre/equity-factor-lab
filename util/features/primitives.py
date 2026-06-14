@@ -135,6 +135,33 @@ def prim_ts_logslope(df, sym_col, x: pd.Series, lookback: int) -> pd.Series:
     return out
 
 
+def prim_cs_fraction(
+    df: pd.DataFrame,
+    date_col: str,
+    x: pd.Series,
+    threshold: float,
+    direction: str = "gt"
+):
+    if direction == "gt":
+        s = x > threshold
+    elif direction == "ge":
+        s = x >= threshold
+    elif direction == "lt":
+        s = x < threshold
+    elif direction == "le":
+        s = x <= threshold
+    else:
+        raise ValueError("Unsupported direction, please provide supported directions (gt, ge, lt, le)")
+
+    # Comparisons against NaN return False (not NaN), which would otherwise be
+    # counted in the cross-sectional denominator. Mask NaN inputs so the fraction
+    # is computed only over symbols with a defined value on that date.
+    s = s.astype(float).where(x.notna())
+    out = s.groupby(df[date_col]).transform("mean")
+    out.name = None
+    return out
+
+
 def prim_diff(a: pd.Series, b: pd.Series) -> pd.Series:
     return a - b
 
@@ -235,6 +262,7 @@ PRIMITIVES: Dict[str, Callable[..., pd.Series]] = {
     "ts_slope": prim_ts_slope,
     "ts_pctslope": prim_ts_pctslope,
     "ts_logslope": prim_ts_logslope,
+    "cs_fraction": prim_cs_fraction,
     "diff": prim_diff,
     "rdiff": prim_rdiff,
     "scale": prim_scale,

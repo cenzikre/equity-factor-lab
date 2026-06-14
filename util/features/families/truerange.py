@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from util.features.core import (
+    FeatureNameSpec,
     FeatureSpec,
     FeatureTemplate,
-    make_feature_name,
     make_spec,
     col,
     feat,
@@ -14,7 +14,7 @@ DOMAIN = "px"
 FAMILY = "tr"
 
 
-def tr_feature_name(signal: str, *, lb=None, w=None, p=None, state="raw") -> str:
+def tr_feature_name(signal: str, *, lb=None, w=None, p=None, state="raw") -> FeatureNameSpec:
     params = {}
     if lb is not None:
         params["lb"] = lb
@@ -23,7 +23,7 @@ def tr_feature_name(signal: str, *, lb=None, w=None, p=None, state="raw") -> str
     if p is not None:
         params["p"] = p
 
-    return make_feature_name(
+    return FeatureNameSpec(
         domain=DOMAIN,
         family=FAMILY,
         signal=signal,
@@ -156,7 +156,7 @@ def template_ts_natr(
     )
 
     maprc = make_spec(
-        name=make_feature_name(
+        name=FeatureNameSpec(
             domain="px",
             family="prc",
             signal="mean",
